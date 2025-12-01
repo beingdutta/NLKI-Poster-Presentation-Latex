@@ -151,6 +151,10 @@
 \setbeamercolor{block alerted title}{fg=white,bg=jblue}
 \setbeamercolor{block alerted body}{fg=black,bg=jblue!10}
 
+% set colors for greenbox
+\setbeamercolor{block greenbox title}{fg=white,bg=ngreen}
+\setbeamercolor{block greenbox body}{fg=black,bg=ngreen!10}
+
 % set the fonts
 \setbeamerfont{section in head/foot}{series=\bfseries}
 % \setbeamerfont{block title}{series=\bfseries}
@@ -274,6 +278,38 @@
 }
 
 \setbeamertemplate{block alerted end}
+{
+    \end{minipage}
+    \end{center}
+  \end{beamercolorbox}
+  \end{beamercolorbox}
+}
+
+% Greenbox block definition
+\setbeamertemplate{block greenbox begin}
+{
+  \par\vskip\medskipamount
+  \begin{beamercolorbox}[sep=0ex,rounded=true,center,dp={2ex}]{block greenbox title}
+    \vskip0.01cm
+    \usebeamerfont{block title}\large\insertblocktitle
+  \end{beamercolorbox}
+  {\parskip0pt\par}
+  \usebeamerfont{block body}
+  \vskip-0.8cm
+  \begin{beamercolorbox}[sep=0.5cm, rounded=true,center]{block greenbox title}
+  \setlength{\inboxwd}{\linewidth}
+  \addtolength{\inboxwd}{-1cm}
+  \begin{beamercolorbox}[rounded=true,wd={\inboxwd},center]{block greenbox body}
+  \setlength{\iinboxwd}{\inboxwd}
+  \setlength{\inboxrule}{\inboxwd}
+  \addtolength{\iinboxwd}{-0.5cm}
+  \addtolength{\inboxrule}{0.5cm}
+  \begin{center}
+  \begin{minipage}{\iinboxwd}
+  \justifying
+}
+
+\setbeamertemplate{block greenbox end}
 {
     \end{minipage}
     \end{center}
