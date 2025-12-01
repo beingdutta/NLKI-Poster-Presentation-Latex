@@ -1,0 +1,410 @@
+\section{Datasets}
+\label{sec:dataset-descriptions}
+We focus on CRIC, AOKVQA, and e-SNLI-VE, which emphasise open-ended, contextual commonsense reasoning over encyclopedic or synthetic factoid knowledge. Datasets like FVQA and WHOOPS, which centre on factual recall or synthetic errors, are excluded as they diverge from our goal of modelling everyday reasoning.
+
+\textbf{CRIC} contains 494K automatically generated questions over 96K Visual Genome images, enriched with 3.4K knowledge items from ConceptNet and Wikipedia.
+\textbf{AOKVQA} includes ~25K diverse, crowdsourced questions based on COCO images. Both CRIC and AOKVQA are multiple-choice tests with four options each.
+\textbf{e-SNLI-VE} combines Flickr30k and SNLI-VE, with hypotheses labeled as \textit{Entailment}, \textit{Contradiction}, or \textit{Neutral}.
+
+\begin{table}[!ht]
+\centering
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{@{}cccccc@{}}
+\toprule
+Dataset & Type & Train & Val & Test & Answer Type \\ 
+\midrule
+CRIC & VQA & 364K & 76K & 84K & MCQ\\
+AOKVQA & VQA & 17K & 1.1K & 6.7K & MCQ\\
+e-SNLIVE & NLI & 401K & 14K & 14K & NLI Labels\\
+\bottomrule
+\end{tabular}%
+}
+\caption{Table showing the split size and answer type for all datasets.}
+\label{tab:datasets-used}
+\end{table}
+
+\section{Architecture Description}
+\label{sec:models-used}
+We have selected models all under 240M for our VQA classification task. We opted for two different architectures 1. Single Stream 2. Dual Stream is based on the processing of both modalities, vision and text.
+\\\noindent
+\textbf{ViLT} \cite{vilt1} is a Transformer-based unified architecture that uses a single transformer module to encode and fuse both visual and text features in place of a separate deep visual embedder. 
+\\\noindent
+\textbf{VisualBERT} \cite{li2019visualbert} requires a set of visual embeddings (representing the visual features)  extracted from an image encoder and text embeddings encoded with BERT. Then, it utilises the self-attention mechanism for implicit alignment of elements in the input text and regions within the input image. 
+\\\noindent
+\textbf{FLAVA} \cite{flava} is a multimodal transformer-based model designed to process and align visual and textual information for various vision and language tasks.
+
+\paragraph{KAT Implementation}
+\label{sec:kat-implementation}
+KAT originally used filtered English Wikidata and GPT-3 to extract implicit knowledge. In our setup, we use \verb|gpt-3.5-turbo| for this step. Since VinVL and Oscar (used by KAT for extracting image features and captions) are no longer publicly available, we replace them with Florence-generated dense and region captions to query GPT-3.5. We retain the original prompt format but, due to resource constraints, combine answer and explanation generation into a single API call with a modified prompt. Final results are reported in Table~\ref{tab:main_accuracy_table}.
+
+\paragraph{Model Context Length \& Truncation Strategy}
+\label{sec:truncation}
+To integrate external knowledge into the model input, we prepend the generated explanation to the original question using the format: \verb|<explanation>[SEP]<question>| before pairing this text with the corresponding image features. For the smaller reader VLMs, we enforce a strict 100-token limit on the concatenated explanation–question string: if the combined text exceeds this budget, truncation is applied from the end, ensuring that the leading tokens, which typically contain the most informative content, are preserved. This strategy was consistently applied across all datasets and models. Empirically, truncation was seldom triggered, as the average token counts remained well below the limit (e.g., CRIC: 12.74 tokens for questions and 19.35 for explanations; AOKVQA: 8.69 and 9.09; e-SNLI-VE: 7.39 and 10.43, respectively).
+
+\section{Retrieval}
+\paragraph{What is majority voting?}
+\label{majority}
+In the majority voting setup, we concatenate each of the top-5 retrieved facts individually with the question and image context to form five separate inputs. The model then predicts an answer for each of these fact-augmented inputs independently. We collect all five predicted labels and select the final answer by majority vote—i.e., the label that appears most frequently across the five runs. This approach helps smooth over noisy or irrelevant facts by relying on the consensus across multiple evidence sources, making the final prediction more robust to individual retrieval errors.
+\paragraph{Comparison of Retrieval Performance from OMCS 1.5M and 20M Knowledge Corpus} 
+To verify the commonsense facts quality, we chose a random sample of 20K from both the CRIC and e-SNLI-VE datasets. Although the CRIC test set is larger, a subset of 20K facts was chosen to make the results comparable to those of e-SNLI-VE, which has 15K samples in the test set. Looking at the results, it is evident that the OMCS corpus alone contains more relevant facts for commonsense reasoning when compared to the Ground Truth explanations. OMCS is also nearly 20 times smaller; hence, retrievals from the corpus are significantly faster.
+\begin{table*}[ht]
+\small
+\centering
+\begin{tabular}{@{}ccccccc@{}}
+\toprule
+Corpus & K & Rouge1 & Rouge2 & RougeL & BLEU & Cosine Score \\ 
+\midrule
+ & @ 5 & 55.86 & 45.52 & 54.94 & 57.68 & 60.58 \\
+\multirow{-2}{*}{OMCS 1.5M} & @ 10 & 58.86 & 49.22 & 58.09 & 66.74 & 62.38 \\
+\midrule
+ & @ 5 & 41.06 & 28.11 & 39.69 & 51.49 & 45.63 \\
+\multirow{-2}{*}{20M Comm. Corpus} & @ 10 & 38.96 & 25.48 & 37.56 & 61.19 & 43.74 \\ 
+\midrule 
+\end{tabular}
+\caption{BLEU, ROUGE, and Cosine Score of facts retrieved from the OMCS Corpus against facts retrieved from the cumulative 20M corpus introduced by \cite{raco} using pre-trained ColBERTv2. Retrieved facts are compared to the ground truth explanation. Scores were reported on 20K random samples from the test set of e-SNLI-VE.}
+\label{tab:cric_omcs_vs_20M_corpus}
+\end{table*}
+
+\begin{table*}[ht]
+\small
+\centering
+\begin{tabular}{@{}ccccccc@{}}
+\toprule
+Corpus & K & Rouge1 & Rouge2 & RougeL & BLEU & Cosine Score \\ \midrule
+\multirow{2}{*}{OMCS 1.5M} & @ 5 & 28.58 & 13.71 & 25.86 & 48.12 & 30.67 \\
+ & @ 10 & 28.52 & 13.71 & 25.77 & 47.96 & 15.37 \\
+\midrule
+\multirow{2}{*}{20M Comm. Corpus} & @ 5 & 27.84 & 12.50 & 24.81 & 41.63 & 26.21 \\
+ & @ 10 & 27.63 & 12.49 & 24.95 & 41.84 & 13.17 \\ 
+\midrule
+\end{tabular}
+\caption{BLEU, ROUGE, and Cosine Score of facts retrieved from the OMCS Corpus against facts retrieved from the cumulative 20M corpus introduced by \cite{raco} using pre-trained ColBERTv2. Retrieved facts are compared to the ground truth explanation. Scores were reported on 20K random samples from the test set of CRIC.}
+\label{tab:esnli_omcs_vs_20M_corpus}
+\end{table*}
+
+\paragraph{Retrieval Performance for Commonsense VQA Tasks}
+Here we present the detailed scores across the metrics like BLEU, ROUGE, and cosine similarity for top-5 and top-10 results for measuring the retrieval performance specific to our task. In Table. \ref{tab:retrieval_scores} we present the result of the three top retrievers for clarity, which was found to be effective for our commonsense VQA task.
+
+\begin{table*}[!ht]
+\small
+\centering
+\begin{tabular}{@{}ccccccc@{}}
+\toprule
+Query & Method & R-L@5 & R-L@10 & B-1@5 & Cosine@5 & Cosine@10 \\ 
+\midrule
+Q & SBERT + FAISS & \textbf{41.86} & \textbf{47.80} & \textbf{38.30} & \textbf{53.56} & \textbf{58.46} \\
+C + Q & SBERT + FAISS & 38.57 & 44.70 & 35.21 & 51.54 & 56.88 \\
+Objects + Q & SBERT + FAISS & 40.93 & 46.73 & 37.34 & 52.61 & 57.67 \\
+SG + Q & SBERT + FAISS & 36.05 & 41.91 & 32.88 & 47.01 & 52.21 \\
+\textit{All} + Q & SBERT + FAISS & 35.52 & 46.55 & 32.65 & 46.55 & 51.78 \\
+\midrule
+Q & ColBERTv2 & 61.33 & 67.32 & 56.24 & 68.69 & 73.11 \\
+\midrule
+Q & ColBERTv2-FT & \textbf{74.48} & \textbf{77.44} & \textbf{69.99} & \textbf{77.65} & \textbf{80.62} \\
+C + Q & ColBERTv2-FT & 52.03 & 55.77 & 45.95 & 64.34 & 68.39 \\
+Objects + Q & ColBERTv2-FT & 52.11 & 56.26 & 46.27 & 66.01 & 69.41 \\
+SG + Q & ColBERTv2-FT & 31.12 & 34.89 & 27.56 & 41.99 & 43.75 \\
+\textit{All} + Q & ColBERTv2-FT & 19.40 & 23.39 & 16.94 & 33.89 & 37.67 \\
+\midrule
+Q & Stella-en-v5 & \textbf{46.72} & \textbf{54.27} & \textbf{42.01} & 62.58 & 67.18 \\
+C + Q & Stella-en-v5 & 32.28 & 38.76 & 28.56 & 50.14 & 55.10 \\
+Objects + Q & Stella-en-v5 & 43.89 & 51.36 & 39.27 & \textbf{62.98} & \textbf{67.66} \\
+SG + Q & Stella-en-v5 & 30.02 & 36.50 & 27.50 & 50.02 & 53.65 \\
+\textit{All} + Q & Stella-en-v5 & 29.01 & 34.65 & 25.67 & 46.76 & 51.15 \\
+\bottomrule
+\end{tabular}
+\caption{Comparison of BLEU, ROUGE, and Cosine Scores for Various Retrieval Mechanisms (on CRIC test split). We report the performance of different retrieval methods based on BLEU-1 (B-1), ROUGE-L (R-L), and Cosine similarity scores across different query settings. Finetuned ColBERTv2 outperforms all other methods. $Q$: Question, $C$: Caption, $O$: Detected Objects}
+\label{tab:retrieval_scores}
+\end{table*}
+\paragraph{Examples of Retrieved Facts: FAISS vs ColBERTv2}
+\begin{figure*}[!htb]
+\centering
+\includegraphics[width=\textwidth]{images/pt_vs_ft_appendix.jpg} 
+\caption{Examples illustrating that pre-trained COLBERTv2 performs better than FAISS vector search in retrieving contextually relevant facts from OMCS Corpus. $C_{i,q}$ indicates $i^{\text{th}}$ fact retrieved using the question as the query by the pre-trained ColBERTv2, $F_{i,q}$ indicates $i^{\text{th}}$ fact retrieved using a question as the query by FAISS vector search.}
+\label{fig:pt_vs_ft_collection}
+\end{figure*}
+We provide more examples in Fig. \ref{fig:pt_vs_ft_collection}, depicting the difference in relevance of the facts retrieved by FAISS and those retrieved by Colbert. In (a), both FAISS and ColBERT retrieve facts unrelated to the query, which asks about \textit{furniture}, whereas the facts are about objects related to producing or listening to music. In (b), only the first fact retrieved by FAISS is close to what the query asks for, and all other facts are only connected to the query by one concept (such as `riding' or `walk'). The facts retrieved by ColBERT are directly related to sidewalks and activities it can be used for. Although none are direct answers, they are still semantically much closer to the query than the FAISS-retrieved facts. A similar pattern is noticed in (c), wherein the FAISS-retrieved facts are only related to the query by a singular concept (such as ``branch" or ``tree"), but the Colbert facts are both conceptually and contextually relevant; in this case, they are direct answers to the query. 
+
+\paragraph{Finetuning Colbert}
+\label{sec:finetuning-colbert}
+Using a contrastive learning approach, we optimise the pairwise softmax cross-entropy loss over the relevance score $S_{q,d}$  for \( d^+ \) and \( d^- \) with the query $q$. 
+\begin{equation*}
+L(q, d^+, d^-) = -\log \left( \frac{\exp(S_{q,d^+})}{\exp(S_{q,d^+}) + \exp(S_{q,d^-})} \right)
+\end{equation*}
+We used a batch size of $32$, with a single $46$ GB NVIDIA A$40$ GPU, having a maximum length of the facts as $128$ (most facts are much smaller in length), and default settings for other parameters as in \citet{colbert}. We used $160K$ samples from the training splits of CRICs for fine-tuning due to the variety of queries in it. We experimented with adding more than $160K$ data to finetune it, but it didn't help improve the scores any further.
+
+\section{Effect of Increasing Number of Retrieved Facts}
+\begin{table}[!ht]   % Reduce the font size
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{@{}ccccc@{}}
+\toprule
+Architecture & Input & e-SNLI-VE & CRIC & AOKVQA \\ 
+\midrule
+\multirow{5}{*}{ViLT} & Question & \textbf{76.46} & \textbf{72.99} & \textbf{24.01}\\
+ & 1 Fact + Question & 75.60 & 71.38 & 13.45 \\
+ & 2 Facts + Question & 69.88 & 71.64 & 13.45 \\
+ & 3 Facts + Question & 65.44 & 62.00 & 11.38 \\
+ & 5 Facts + Question & 64.62 & 38.30 & 13.25 \\
+\midrule
+\multirow{5}{*}{VisualBERT} & Question & \textbf{74.48} & \textbf{62.60} & \textbf{23.6} \\
+ & 1 Fact + Question & 74.34 & 61.00 & 22.0 \\
+ & 2 Facts + Question & 73.99 & 20.25 & 20.0\\
+ & 3 Facts + Question & 73.98 & 19.00 & 19.0\\
+ & 5 Facts + Question & 73.62 & 19.00 & 19.0\\
+\midrule
+\multirow{5}{*}{FLAVA} & Question & \textbf{79.93} & \textbf{73.11} & \textbf{33.07}\\
+ & 1 Fact + Question & 79.59 & 71.36 & 32.68 \\
+ & 2 Facts + Question & 79.76 & 31.51 & 31.51\\
+ & 3 Facts + Question & 79.81 & 31.31 & 34.48\\
+ & 5 Facts + Question & 78.72 & 25.84 & 25.84\\
+\bottomrule
+\end{tabular}
+}
+\caption{Performance on varying the number of facts retrieved by finetuned ColBERTv2 concatenated with the query.}
+\label{tab:k-facts-concat}
+\end{table}
+While somewhat useful, retrieved facts generally perform the worst in enhancing model performance, especially as more facts are concatenated. The primary hindrance is their often disjoint nature and lack of direct relevance to the specific question. In our experiments, as the number of concatenated facts increased, we consistently observed a decline in accuracy across various datasets. This decline can be attributed to several factors: the relevance of retrieved facts diminishes with quantity, introducing noise and reducing clarity. For instance, accuracy in the CRIC dataset dropped from 72.99\% with just the question to 38.30\% with five facts appended to the question. Similarly, ViLT's performance on the e-SNLI-VE dataset fell from 76.46\% to 69.62\%. The same pattern repeats for other models as well. The inclusion of more facts tends to clutter the input with irrelevant or redundant information, making it difficult for the model to focus on the relevant information, leading to degraded performance.
+
+\section{Generative Small VLMs}
+\label{sec:generative-vlm-description}
+As the research community increasingly prioritises efficiency and low carbon footprints, there has been a growing shift towards small-vision language models (sVLMs) and low-resource training strategies. Therefore, in the context of commonsense VQA, we benchmarked the mentioned generative instruction-tuned VLMs\footnote{We used the standard HuggingFace implementations for all the small generative VLMs: \href{https://huggingface.co/Qwen/Qwen2-VL-2B-Instruct}{\url{https://huggingface.co/Qwen/Qwen2-VL-2B-Instruct}}, \href{https://huggingface.co/openbmb/MiniCPM-V}{\url{https://huggingface.co/openbmb/MiniCPM-V}}, \href{https://huggingface.co/HuggingFaceTB/SmolVLM-Instruct}{\url{https://huggingface.co/HuggingFaceTB/SmolVLM-Instruct}}, \href{https://huggingface.co/microsoft/Phi-3-vision-128k-instruct}{\url{https://huggingface.co/microsoft/Phi-3-vision-128k-instruct}}
+} on our datasets. We limit ourselves to models with $<$ 4 billion parameters, as shown in Figure \ref{fig:accuracy-vs-size}. 
+The effectiveness of these rigorously pre-trained generative models in commonsense VQA remained underexplored.
+The observations in Table ~\ref{tab:generative-models-aokvqa} suggest the reason for the sub-optimal \textit{EM} and \textit{Cosine Accuracy} scores is that generative models can provide expressive answers based on their pre-training, but fail when asked questions that require explicit commonsense reasoning abilities. Also, it raises concerns about their ability to generalise beyond their training data, as in our case, no external knowledge was provided during this benchmarking. We used bert-score \cite{bertscore} to evaluate the \textit{P}, \textit{R}, \textit{F1}, which uses the contextual embeddings for computing token similarity. We chose the cosine similarity threshold as \textit{0.71} based on manual analysis of results specific to our datasets.
+
+\section{Qualitative Analysis of Generated, Retrieved and Manual Explanations.}
+In Fig.~\ref{fig:explanation_collection}, we show ground truth, retrieved facts, and generated explanations (\textbf{Types 0, 1, and 5}) comparatively for images in CRIC. Ground-truth explanations are accurate but lack context grounded in the query, making them less helpful for complex queries. \textbf{Type-1} generated explanations depend on the often incomplete context provided by the caption. For example, for Fig. \ref{fig:explanation_collection}b, the caption is ``there are many different types of food on display on the case'' and the objects include only ``bananas'', as the orange is obscured from view by the box in front. The LLM hallucinates and claims that the banana is behind the box, whereas it is actually in front. But the \textbf{Type-5} explanation, which includes region information, correctly detects the orange behind the box and reasons that an \textit{orange} has a higher vitamin C content and is also behind the box. 
+Retrieved facts often consist of fragmented information that lacks the necessary context or specificity for the exact question. These facts may score higher on metrics like BLEU or ROUGE due to shared phrases with ground-truth explanations, but they often fail to contribute significantly to the model’s reasoning process, as they do not contain the elaborate context required for accurate answer derivation.
+
+\section{Noise}
+\paragraph{Noise in Datasets}
+\label{sec:noise-description}
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{images/noise-plot-cric.png} 
+\caption{Noise Distribution of CRIC. We checked 1000 random samples, out of which 175 samples had label noise and others had the above distribution.}    
+\label{fig:noise-plot-cric}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{images/noise-plot-aokvqa.png} 
+\caption{Noise Distribution of AOKVQA. We checked 1000 random samples, out of which around 90 samples had label noise, and others had the above distribution, which is significantly better than CRIC.}    
+\label{fig:noise-plot-aokvqa}
+\end{figure}
+
+Figure \ref{fig:noise-examples} presents noisy samples from our chosen dataset that contribute to performance degradation. Through manual analysis of a substantial portion of the dataset, we identified issues such as noisy labels, ambiguous answers, and unclear questions. Below, we highlight some noteworthy examples illustrating these noise types. Additionally, Figs. \ref{fig:noise-plot-cric} and \ref{fig:noise-plot-aokvqa} categorise the various types of noise present in the CRIC dataset.
+
+\paragraph{Noise Ablations of e-SNLI-VE and AOKVQA}
+Here we present the effect of using Symmetric Cross Entropy Loss and Generalised Cross Entropy Loss when applied to e-SNLI-VE and AOKVQA datasets in Tables~\ref{tab:esnlive-loss-comparison}\&\ref{tab:aokvqa-loss-comparison} respectively. Other than FLAVA, both SCE and GCE+CE combinations provide noticeable gains. For e-SNLI-VE, however, such gains are not prominent. Also, we present the noise distribution of CRIC and AOKVQA, analysed by 3 independent raters who are computer science graduates, two of whom are authors of this paper. 
+
+\begin{table}[!ht]
+\centering
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+Architecture & Type & CE & SCE & GCE + CE \\
+\midrule
+ViLT         & Type-5 & 78.46 & 77.75 & \textbf{78.57} \\
+VisualBERT   & Type-5 & 78.83 & 77.23 & \textbf{78.95} \\
+FLAVA        & Type-5 & 81.54 & 80.47 & \textbf{82.05} \\
+\bottomrule
+\end{tabular}%
+}
+\caption{Comparison of performance (in percentages) for different architectures using various loss functions for e-SNLI-VE.}
+\label{tab:esnlive-loss-comparison}
+\end{table}
+
+\begin{table}[!ht]
+\centering
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+Architecture & Type & CE & SCE & GCE + CE \\
+\midrule
+ViLT         & Type-5 & 28.15 & \textbf{33.45} & 32.33 \\
+VisualBERT   & Type-5 & 35.40 & \textbf{40.12} & 38.51 \\
+FLAVA        & Type-5 & \textbf{47.85} & 47.73 & 46.45 \\
+\bottomrule
+\end{tabular}%
+}
+\caption{Comparison of performance (in percentages) for different architectures using various loss functions for AOKVQA.}
+\label{tab:aokvqa-loss-comparison}
+\end{table}
+
+
+\begin{figure*}[!htb]
+\centering
+\includegraphics[width=\textwidth]{images/noise-examples.jpg} 
+\caption{Examples illustrating the \textbf{noisy samples} from the datasets. where \textit{Noise Category} is the type of noise we encountered during manual analysis, \textit{Explanation Generated From Noisy Sample} is the LLaMA-3.1-8B explanation generated as a result of the noise for each sample, which degrades the overall performance. }
+\label{fig:noise-examples}
+\end{figure*}
+
+
+\section{Explanation Generation}
+\paragraph{Examples for Type-0, Type-1, Type-5 Explanations}
+\begin{figure*}[!htb]
+\centering
+\includegraphics[width=\textwidth]{images/4500_4032_img_collection_3_test.jpg} 
+\caption{Examples from the CRIC dataset showing the difference between the Ground Truth, Type-0, Type-1 and Type-5 explanations generated by the LLama-3.1-8B. In all four cases, the \textbf{Type-5} explanation is the most rational and contextually relevant. \textbf{Type-0} and \textbf{Type-1} explanations are often hallucinated (to align the explanation with the label) or do not make rational sense. More examples are in the Appendix.}
+\label{fig:explanation_collection}
+\end{figure*}
+
+Here we provide more examples of the different \textbf{Types} of explanation produced by Llama-3.1-8B index (a - g). Of the 8 examples presented, only in (c) is the \textbf{Type-5} explanation incorrect. Even in that case, the explanation is still rationally correct because there is indeed no  ``object" on the aeroplane-- the question refers to the text ``FOX" on the engine, which is technically not an object. In all the examples, the \textbf{Type-0} explanations are not semantically consistent; they stray off the context very quickly and produce factually incorrect claims. This is evidenced by the examples in Fig.\ref{fig:hallucinated_explanation_collection}. Although consistent, the \textbf{Type-1} explanations are nearly never precise enough to enable the downstream VLM to identify the correct answer. 
+
+\paragraph{Florence Finetuning For Explanation Generation And Comparison.}
+\label{sec:florence-fn-description}
+As we explore the generation capability of Florence (sVLM) with 606M parameters, we found that, though it excels in several vision-language tasks, it failed to generate a well-reasoned explanation concerning the context of its image and the questions supplied to it. To ensure the quality of data to finetune Florence, we used a training split of the VQAe dataset comprising 181K data instances. We used VQAe \cite{vqae} because it closely resembles the type of explanations that CRIC and e-SNLI-VE have. We report the Florence finetuned performance on CRIC in \ref{tab:explanation_quality_scores}. In \ref{fig:florence-ft-expl} we show the difference between explanations generated by the Florence vs LLAMA-3.1-8B \textbf{(Type 5)}.
+
+\paragraph{LLM Prompts for Explanation Generation: LLaMA-3.1-8B \& GPT-3.5}
+We feed GPT-3.5 and LLaMA-3.1-8B with Image captions, Objects Detected, and Retrieved Facts from OMCS, then ask it to analyse and generate a short explanation leveraging these details. We kept on improving our prompts through experimentation because GPT/LLAMA generated extra texts containing additional reasoning for the explanation it generated, which are difficult to post-process. Below, we illustrate the prompt template.
+
+\begin{figure*}[h!]
+    \centering
+    \includegraphics[width=\textwidth]{images/appendix_example_1.jpg} 
+    \label{fig:explanation_collection2}    
+\end{figure*}
+\begin{figure*}[h!]
+    \centering
+    \includegraphics[width=\textwidth]{images/appendix_example_2.jpg} 
+    \label{fig:explanation_collection3}    
+\caption{More examples of \textbf{Type-0}, \textbf{Type-1}, and \textbf{Type-5} generated explanations.}
+\end{figure*}
+
+\begin{figure*}[h!]
+    \centering
+    \includegraphics[width=\textwidth]{images/appendix_example_3_fl_ft.jpg} 
+    \caption{Examples showing difference between the LLAMA-3.1-8B generated \textbf{Type 5} explanation and Florence Finetuned Generated explanations \textbf{Type 7}}
+    \label{fig:florence-ft-expl}  
+\end{figure*}
+
+To avoid label leakage in the generated explanations, we also explicitly instruct the LLM not to produce the forbidden words. For instance, terms like "image description" and "caption" confuse the VQA model; thus, we filter out these words. This also includes words like "entailment" and "contradiction" when using the prompt to generate explanations for the e-SNLI-VE dataset. We explicitly instruct the LLM to generate only explanations within 10-15 words because, in the knowledge concatenation experiments, we found that the longer the input text gets, the lower the performance the model delivers.
+
+\begin{table*}[t]
+\small % Reduce the font size
+\centering
+\label{tab:rouge_cumulative_scores}
+\begin{tabularx}{\textwidth}{@{}ccccccccc@{}}
+\toprule
+Dataset & Knowledge Type & Split & Rougue-1 & Rougue-2 & \begin{tabular}[c]{@{}c@{}}Cumulative \\ 1-gram\end{tabular} & 
+\begin{tabular}[c]{@{}c@{}}Cumulative \\ 2-gram\end{tabular} & 
+\begin{tabular}[c]{@{}c@{}}Cumulative \\ 3-gram\end{tabular} & 
+\begin{tabular}[c]{@{}c@{}}Cosine \\ Score\end{tabular} \\
+\midrule
+\multirow{6}{*}{e-SNLI-VE} & Explanations & Train & 24.35 & 5.97 & 13.20 & 6.31 & 3.88 & \textbf{49.98} \\
+ & Retrieved Fact & Train & \textbf{27.11} & \textbf{8.06} & \textbf{20.92} & \textbf{10.58} & \textbf{6.62} & 47.66 \\
+ \cmidrule(l){2-9} 
+ & Explanations & Val & 25.79 & 6.43 & 14.50 & 6.85 & 4.20 & \textbf{50.36} \\
+ & Retrieved Fact & Val & \textbf{31.87} & \textbf{7.81} & \textbf{20.17} & \textbf{10.04} & \textbf{6.26} & 47.46 \\
+ \cmidrule(l){2-9} 
+ & Explanations & Test & 25.95 & 6.54 & 14.50 & 6.85 & 4.17 & \textbf{50.50} \\
+ & Retrieved Fact & Test & \textbf{32.08} & \textbf{7.98} & \textbf{20.30} & \textbf{10.14} & \textbf{6.34} & 47.04 \\
+ \midrule
+\multirow{6}{*}{CRIC} & Explanations & Train & 31.76 & 13.78 & 7.16 & 4.86 & 3.70 & 54.40 \\
+ & Retrieved Fact & Train & \textbf{80.34} & \textbf{69.99} & \textbf{75.52} & \textbf{69.57} & \textbf{63.16} & \textbf{80.33} \\
+ \cmidrule(l){2-9} 
+ & Explanations & Val & 29.73 & 12.49 & 6.27 & 4.15 & 3.14 & 51.59 \\
+ & Retrieved Fact & Val & \textbf{80.85} & \textbf{70.34} & \textbf{75.99} & \textbf{69.95} & \textbf{63.52} & \textbf{81.37} \\
+ \cmidrule(l){2-9} 
+ & Explanations & Test & 29.77 & 12.45 & 6.32 & 4.19 & 3.17 & 51.64 \\
+ & Retrieved Fact & Test & \textbf{80.95} & \textbf{70.51} & \textbf{76.06} & \textbf{70.05} & \textbf{63.64} & \textbf{81.49} \\ 
+ \midrule
+\multirow{4}{*}{AOKVQA} & Explanations & Train & \textbf{49.29} & \textbf{27.86} & \textbf{39.88} & \textbf{29.55} & \textbf{23.45} & \textbf{65.31} \\
+ & Retrieved Fact & Train & 0.3263 & 8.05 & 19.47 & 9.59 & \textbf{5.96} & 43.86 \\
+ \cmidrule(l){2-9} 
+ & Explanations & Val & \textbf{50.78} & \textbf{30.24} & \textbf{41.25} & \textbf{31.24} & \textbf{25.43} & \textbf{66.52} \\
+ & Retrieved Fact & Val & 33.56 & 8.81 & 20.32 & 10.15 & 6.27 & 45.09 \\
+ \bottomrule
+\end{tabularx}
+\caption{LLM-generated explanations outperform the retrieved facts in assisting the models in deriving correct answers due to their relevant context, precision, and coherence. However, the retrieved facts, while being less helpful for reasoning, yield higher BLEU \& ROUGE scores than the generated explanations. This is attributed to the nature of BLEU and ROUGE metrics-- retrieved facts have more overlapping $n$-grams with the ground truth than the generated explanations, even if they lack contextual relevance and depth.}
+\end{table*}
+
+\begin{figure*}[!htb]
+\centering
+\includegraphics[width=\textwidth]{images/hallucinated_examples.jpg} 
+\caption{We report some instances where the LLM generates inaccurate \textbf{Type-0} explanations (where ground truth label was used). The visual and textual disconnects highlight the challenges LLMs face in reasoning, leading to 'hallucinations' that stray away from the visual context in the image.}
+\label{fig:hallucinated_explanation_collection}
+\end{figure*}
+
+\paragraph{What We Define as Hallucinations and Their Constituents}
+\label{sec:hallucination-description}
+In our work, we used the term \emph{“Hallucination”} repeatedly to indicate any content in an LLM-generated explanation that is not supported by and in some cases directly contradicts the information in the question, the image, or any retrieved knowledge provided as context. In other words, whenever the generated text introduces details (objects, events, attributes, etc.) that do not appear in the image or are not logically inferable from the question and any external knowledge, we categorise those extraneous or fabricated details as hallucinations.
+
+A typical example would be in Fig. \ref{fig:hallucinated_explanation_collection}d when the explanation states that the image contains \textit{“apples”} even though the visual data and object detections show \textit{"no apples"}. This also includes instances where the explanation confidently describes relationships or properties that are not depicted (e.g., \textit{“the dog is wearing a red collar”} when no collar is visible). These are \textbf{hallucinated} elements because they are neither prompted by the data nor verifiable through the available context.
+
+
+\paragraph{Generating Type-5 Explanations with Various Llama Versions}
+\label{sec:llama-variants}
+Since \textbf{Type-5 }explanations are the ones that worked best for our use case, as seen in Table \ref{tab:explanation_quality_scores} and Table \ref{tab:main_accuracy_table}, we tried generating them with smaller models from the Llama family, aside from our primary Llama-3.1-8B model. We used Llama-3.2-1B \& 3B for this. We report the scores in Table ~\ref{tab:llama-variant-table}.
+
+\begin{table}[!ht]
+\centering
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{@{}ccccccc@{}}
+\toprule
+\textbf{Ver} & \textbf{B-1} & \textbf{B-2} & \textbf{R-1} & \textbf{R-2} & \textbf{R-L} & \textbf{C}  \\ 
+\midrule
+8B  & \textbf{31.08} & \textbf{22.77} & \textbf{46.30} & \textbf{24.63} & \textbf{42.78} & \textbf{63.08} \\
+3B  & 27.34 & 19.96 & 44.54 & 23.31 & 41.40 & 61.03 \\
+1B  & 23.10 & 16.76 & 39.60 & 20.07 & 35.60 & 55.87 \\
+\bottomrule
+\end{tabular}%
+}
+\caption{Quality of Type-5 explanations generated with different Llama versions.}
+\label{tab:llama-variant-table}
+\end{table}
+
+\paragraph{AOKVQA Scores for Various Type-K Explanations}
+\label{sec:explanation-scores-aokvqa}
+We initially reported that deriving the Type-5 explanation was most beneficial to our CRIC dataset task. Table ~\ref{tab:explanation-scores-aokvqa-table} reports the same score for AOKVQA, indicating that Type-5 explanations perform the best irrespective of the dataset, both in terms of capturing the visual context or guiding the VQA models for better predictions.
+\begin{table*}[!htb]
+\small
+\centering
+\begin{tabular}{ccccccccc}
+\toprule
+\textbf{Type} & \textbf{Explanation} & \textbf{B-1} & \textbf{B-2} & \textbf{B-3} & \textbf{R-1} & \textbf{R-2} & \textbf{R-L} & \textbf{Cosine} \\ 
+\midrule
+\textbf{Type-2} & DC + Q + $F_{I,Q}$ & 40.38 & 29.92 & 23.92 & 49.38 & 28.16 & 44.88 & 65.98 \\
+\textbf{Type-3} & RC + Q + $F_{I,Q}$ & 34.76 & 25.94 & 20.66 & 43.27 & 24.50 & 40.07 & 50.88 \\
+\textbf{Type-4} & RC + O + Q + $F_{I,Q}$ & 38.09 & 27.86 & 21.99 & 46.55 & 25.50 & 42.56 & 59.93 \\
+\textbf{Type-5} & DC + RC + O + Q + $F_{I,Q}$ & \textbf{41.15} & \textbf{31.34} & \textbf{25.43} & \textbf{50.78} & \textbf{30.24} & \textbf{46.54} & \textbf{66.52} \\
+\textbf{Type-6} & DC + RC + O + Q & 39.13 & 28.84 & 22.96 & 48.52 & 27.23 & 43.90 & 64.95 \\
+\textbf{Type-7} & I + $<TP>$ & 17.49 & 7.51 & 4.48 & 20.45 & 2.57 & 16.78 & 28.08 \\
+\bottomrule
+\end{tabular}
+\caption{Results from the val split of AOKVQA showing a comparison of BLEU, ROUGE, and Cosine Scores (w.r.t. the GT explanation) for various types of explanations.}
+\label{tab:explanation-scores-aokvqa-table}
+\end{table*}
+
+\section{Training Parameters and Resources}
+We report the learning rate and number of epochs below for the models we have used for VQA and Retrieval tasks from the knowledge bases. We have used a dual NVIDIA-A40 GPU system, each with 46 GB of memory, for all the experiments.
+\begin{table}[!ht]
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{@{}ccccc@{}}
+\toprule
+Architecture & LR & Batch Size & \#Epoch & \#Hours \\ 
+\midrule
+ViLT & 5e-5 & 32 & 6 & 15\\
+VisualBERT & 4e-5 & 32 & 6 & 14\\
+FLAVA & 4e-5 & 32 & 6 & 14.5 \\
+ColBERTv2 & 1e-4 & 32 & 4 & 3\\ 
+\bottomrule
+\end{tabular}
+}
+\caption{Hyperparameters for Finetuning tasks}
+\end{table}
+
+\begin{tcolorbox}[colback=gray!5!white,colframe=red!75!black]
+\label{prompt}
+Given an image description, the task is to generate an explanation based on the following information.\\
+
+Traditional-Caption-(TC): \texttt{traditionalcaption}$_I$.\\
+Dense Caption (DC): \texttt{densecaption}$_I$.\\
+Region Caption (RC): \texttt{regioncaption}$_I$.\\
+Objects (O): \texttt{objects}$_I$.\\
+Question (Q): $Q$.\\
+Retrieved Facts (RF): $F_{I,Q}$.\\
+
+You strictly need to produce a 15-20 word single-line explanation to help VQA models derive conclusions and nothing else.  
+Forbidden words: **"image description", "captions"**.
+\end{tcolorbox}

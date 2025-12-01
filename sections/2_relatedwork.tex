@@ -1,0 +1,15 @@
+\section{Related Work}
+Knowledge-based VQA systems pose a challenging task, as they need the models to comprehend visual and textual data while utilising external knowledge to derive correct answers. For instance, as depicted in Fig.~\ref{fig:pt_vs_ft_colbert}, \textit{``Is there a place that is blue and liquid?''}. The correct result ``Ocean'' has to be deduced using the visual information, common knowledge that it is ``liquid'' and ``blue''.
+Symbolic structured knowledge is helpful in this context, for instance, existing literature has used knowledge graphs to retrieve facts, using knowledge graph embeddings and formal language queries \cite{fvqa2018,ZHENG2021108153,chen2021zeroshot}. Beyond KGs, logic-based formalisms have also been used to combine knowledge with reasoning, e.g., Probabilistic Soft Logic for visual puzzle solving in \cite{aditya2018combining}. For unstructured knowledge, \citet{karpukhin2020dense} showed that the Dense-Passage-Retrieval (DPR) technique performs the best by encoding both the question and the knowledge sentences to text embedding using BERT. This method uses cosine similarity (or the dot product) between vectors to retrieve relevant knowledge text.
+
+\paragraph{Retrieval-Augmentation for sVLM.} 
+Retrieval-augmented learning is widely used in language modelling and is increasingly explored in vision-language and multimodal tasks. Recent studies apply retrieval-based augmentation in several ways:
+(i) Image-based retrieval: \citet{rao2024raven} retrieved image-caption pairs using a CLIP-based \cite{radford2021learning} scoring technique, processed by an OFA model ($182M$ parameters) for text generation. \citet{wang2023visuallyaugmented} integrated similar images into vision-language attention layers in a transformer decoder. \citet{rao2023retrieval} retrieved knowledge graphs (KGs), encoded them with a graph encoder, and used them in a BERT + ViT-B vision-language model. These approaches show promising results by enhancing VQA and image captioning through retrieval mechanisms.\\\noindent
+(ii) Multimodal retrieval: \citet{hu2023reveal} and \citet{yasunaga2023retrieval} proposed multimodal retrieval techniques compatible with language modeling, with \citet{hu2023reveal} using T5 + ViT ($400M$–$2.1B$ parameters). \citet{caffagni2024wiki} proposed a two-stage retrieval: CLIP retrieves documents, and Contriever extracts passages for LLaVA VLMs (7B+ parameters) in visual QA. While similar, our approach incorporates additional textual cues, expands retrieval beyond Wikipedia, and uses a smaller VLM.
+
+
+
+
+
+
+

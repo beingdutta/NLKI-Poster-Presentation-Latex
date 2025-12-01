@@ -1,0 +1,220 @@
+\documentclass[final]{beamer}
+\usepackage[scale=1.24,orientation=portrait]{beamerposter}
+\usepackage{graphicx}    % For including images
+\usepackage{colortbl}    % For \rowcolor
+\usepackage{ragged2e}    % For \justifying command
+\usepackage{pifont}      % For \ding command
+\usepackage{hyperref}    % For PDF metadata and links
+
+% Use the theme file you provided
+\usetheme{confposter}
+\usepackage{geometry}
+\geometry{
+  paperwidth=84cm,
+  paperheight=119cm,
+  margin=2cm
+}
+%
+% Poster Metadata
+%
+\title{NLKI: A Lightweight Natural Language Knowledge Integration Framework for Improving Small VLMs in Commonsense VQA Tasks}
+\author{Aritra Dutta\texorpdfstring{$^1$}{1}, Swapnanil Mukherjee\texorpdfstring{$^2$}{2}, Deepanway Ghosal\texorpdfstring{$^3$}{3}, Somak Aditya\texorpdfstring{$^1$}{1}}
+\institute{\texorpdfstring{$^1$}{1}IIT Kharagpur \quad \texorpdfstring{$^2$}{2}Ashoka University \quad \texorpdfstring{$^3$}{3}Independent Researcher}
+
+%
+% The Poster Document
+%
+\begin{document}
+\begin{frame}[t] 
+\begin{columns}[T]
+
+\begin{column}{0.32\linewidth}
+
+    % --- Block 1: The Problem ---
+    \begin{block}{The Problem: sVLMs Lack Commonsense}
+        \justifying % Justifies the text inside the block
+        Small Vision-Language Models (sVLMs) often fail on questions that require external, real-world knowledge not present in the image.
+        \vspace{0.5em}
+        
+        Models like ViLT, VisualBERT, and FLAVA struggle to answer questions requiring reasoning about object properties, functions, or real-world scenarios not explicitly shown.
+        \vspace{1em}
+        
+        \begin{figure}
+            \centering
+            \includegraphics[width=\linewidth]{images/water-example.png}
+            \caption{\textbf{Q: Is there a place that is blue and is liquid ?} An example VQA task requiring external commonsense knowledge: identifying that water is a "Liquid" state of matter and mostly "Blue" in colour in the natural habitats. }
+        \end{figure}
+
+        \begin{figure}
+            \centering
+            \includegraphics[width=\linewidth]{images/cliff-example.jpg}
+            \caption{\textbf{Q: What place of the mountain is dangerous?}. The commonsense knowledge needed is: identifying that the shown "cliff" is a small rock surface, and it can pose a potential threat to life. }
+        \end{figure}
+    \end{block}
+
+    % --- Block 2: The Framework ---
+    \begin{block}{The Solution: NLKI Plug-and-Play Framework}
+        \begin{figure}
+            \centering
+            \includegraphics[width=\linewidth]{images/nlki-block-diagram.png}
+        \end{figure}
+        
+        \justifying
+        Our framework enhances sVLMs by integrating knowledge in a modular, three-step process:
+        \begin{itemize}
+            \item \textbf{Retriever:} A fine-tuned \textbf{ColBERTv2} retrieves the most relevant commonsense facts from a knowledge base.
+            \item \textbf{Context Generation:} A captioner (\textbf{Florence-2-large}) and object detector (\textbf{YOLOv8}) provide rich visual details.
+            \item \textbf{LLM Explainer:} \textbf{Llama-3.1-8B} synthesises the visual context and retrieved facts into a concise, natural language explanation.
+        \end{itemize}
+    \end{block}
+
+
+\end{column}
+
+%======================================================================================
+% COLUMN 2
+%======================================================================================
+\begin{column}{0.32\linewidth}
+
+    % --- Block 3: Finding 1 ---
+    \begin{block}{Results: NLKI Outperforms Baselines and Larger Models}
+        \justifying
+        Our NLKI framework significantly boosts the performance of all sVLMs. The combination of Type-5 explanations and noise-robust training yields best results, allowing models like FLAVA to outperform much larger generative models.
+        \vspace{0.5em}
+        
+        \begin{table}[H]
+            \centering
+            \renewcommand{\arraystretch}{1.1}
+            \setlength{\tabcolsep}{3pt}
+            \resizebox{\linewidth}{!}{
+            \begin{tabular}{lccccc}
+            \hline
+            \textbf{Architecture} & \textbf{Knowledge} & \textbf{e-SNLI-VE} & \textbf{CRIC} & \textbf{AOKVQA} \\ 
+            \hline
+            ViLT & \ding{55} & 76.46 & 72.99 & 24.01 \\
+            Concat (ViLT) & Type 5 & 78.46 & 74.95 & 28.15 \\
+            \rowcolor{gray!10}
+            Concat (ViLT)*+CE & Type 5 & \textbf{78.57} & \textbf{76.98} & \textbf{33.45} \\ 
+            \hline
+            VisualBERT & \ding{55} & 74.48 & 62.60 & 31.59 \\
+            Concat (VB) & Type 5 & 78.83 & 64.69 & 35.40 \\
+            \rowcolor{gray!10}
+            Concat (VB)*+CE & Type 5 & \textbf{78.95} & \textbf{67.15} & \textbf{40.12} \\ 
+            \hline
+            FLAVA & \ding{55} & 79.93 & 73.11 & 33.71 \\
+            Concat (FLAVA) & Type 5 & 81.54 & 75.02 & 37.45 \\
+            \rowcolor{gray!10}
+            Concat (FLAVA)*+CE & Type 5 & \textbf{82.05} & \textbf{77.85} & \textbf{47.85} \\
+            \hline
+            \end{tabular}
+            }
+            \caption{Accuracy comparison across architectures and knowledge types. *+CE denotes noise-robust training.}
+        \end{table}
+    \end{block}
+
+
+    % --- Block 3: Finding 1 ---
+    \begin{block}{Finding 1: Small Models Beat Giants}
+        \justifying
+        NLKI enables our 240M-parameter FLAVA model to match or outperform models 10x its size.
+        \begin{itemize}
+            \item On AOKVQA, NLKI boosts FLAVA's accuracy from \textbf{33.07\% to 47.85\%} (a +14.8\% improvement).
+            \item This performance surpasses larger models like Qwen2-VL (\textbf{41.90\%}) and SmolVLM (\textbf{33.89\%}) with significantly less compute.
+        \end{itemize}
+        \vspace{1em}
+        
+        \begin{figure}
+            \centering
+            \includegraphics[width=\linewidth]{images/paper-plot.png}
+            \caption{NLKI-powered sVLMs (top-left) achieve high accuracy at a fraction of the size and execution time of larger models.}
+        \end{figure}
+    \end{block}
+
+    \begin{block}{Finding 2: Better Prompts, Better Explanations}
+    
+        \justifying
+        Our "Type-5" prompt, which grounds the LLM in a rich visual context, is the most effective at generating accurate explanations and reducing hallucinations.
+        \vspace{0.5em}
+    
+        Compared to other prompt strategies, our Type-5 variant achieves the highest similarity to ground-truth explanations (e.g., \textbf{60.17 Cosine Similarity} on CRIC).
+        \vspace{1em}
+    
+        \begin{figure}[h!]
+            \centering
+            \begin{minipage}[t]{0.49\linewidth}
+                \vspace{0pt} 
+                \includegraphics[width=\linewidth]{images/type-5-winner-plot.png}
+            \end{minipage}%
+            \hfill
+            \begin{minipage}[t]{0.49\linewidth}
+                \vspace{0pt} 
+                \includegraphics[width=\linewidth]{images/vegetable-example.png}
+            \end{minipage}
+            \caption{(Left) Quantitative results showing Type-5's superior similarity scores. (Right) Qualitative example. \textbf{Q:} \textit{Is there a vegetable that is large and contains vitamin C?} \textbf{Type-5 Expl:} \textit{The large head of broccoli in the centre is a vegetable known to be rich in vitamin C.}}
+
+        \end{figure}
+    
+    \end{block}
+    
+\end{column}
+
+%======================================================================================
+% COLUMN 3
+%======================================================================================
+\begin{column}{0.32\linewidth}
+
+    % --- Block 5: Finding 3 ---
+    \begin{block}{Finding 3: Tackling Noisy Data}
+        \justifying
+        Commonsense VQA datasets contain significant label noise ($\sim$18\% in CRIC). Using a noise-robust loss function like Symmetric Cross-Entropy (SCE) is crucial for stable training.
+        \vspace{0.5em}
+        
+        On the CRIC dataset, SCE provides a vital \textbf{+2.8\%} accuracy gain for FLAVA compared to the standard training baseline.
+        \vspace{1em}
+        
+        \begin{figure}
+            \centering
+            \includegraphics[width=\linewidth]{images/noise-plot-cric.png}
+            \caption{Distribution of noise types found in a 1000-sample audit of the CRIC dataset, with label noise being the most prevalent issue.}
+        \end{figure}
+    \end{block}
+
+    % --- Block 7: Inference Time Latency ---
+    \begin{block}{Inference Time Latency}
+        \justifying
+        The total pipeline latency is 1.32s per sample when run sequentially. Most of the cost comes from captioning and explanation generation. The pipeline can be optimised by running components concurrently or offline, making NLKI lightweight and deployable.
+        \vspace{1em}
+        
+        \begin{figure}
+            \centering
+            \includegraphics[width=\linewidth]{images/latency-plot.png}
+            \caption{Breakdown of latency, FLOPs, and GPU usage across NLKI pipeline stages.}
+        \end{figure}
+    \end{block}
+
+    % --- Block 6: Conclusions ---
+    \begin{block}{Conclusions}
+        \begin{itemize}
+            \item \textbf{NLKI} is a lightweight, effective framework for commonsense VQA.
+            \item \textbf{Rich visual context} in prompts is key for high-quality LLM explanations.
+            \item \textbf{Noise-robust losses} are essential for stable training on real-world datasets.
+            \item \textbf{The bottom line:} With NLKI, 250M-parameter models can rival multi-billion parameter giants.
+        \end{itemize}
+    \end{block}
+
+    % --- Block 8: Acknowledgement ---
+    \begin{block}{Acknowledgement}
+        \justifying
+        We gratefully acknowledge the support of the DGX Cluster systems at IIT Kharagpur and the Science and Engineering Research Board (SERB), India, for making this work possible.
+        \vspace{1em}
+        \begin{figure}
+            \centering
+            \includegraphics[width=0.4\linewidth]{images/qr-code.png}
+        \end{figure}
+    \end{block}
+
+\end{column}
+
+\end{columns}
+\end{frame}
+\end{document}
